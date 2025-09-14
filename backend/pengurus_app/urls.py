@@ -1,0 +1,17 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("register-pengurus/", views.RegisterPengurusView.as_view(), name="register-pengurus"),
+    path("register-santri/", views.RegisterSantriView.as_view(), name="register-santri"),
+    path("login-token/", views.LoginPengurusView.as_view(), name="login-token"),
+    path('santri/', views.api_list_santri),
+    path('surat/upload/', views.api_upload_surat_izin),
+    path('recognize/', views.api_recognize_and_attend),
+    path('rekap/', views.api_rekap),
+    path('rekap/export/xlsx/', views.api_export_xlsx),
+    path('rekap/export/pdf/', views.api_export_pdf),
+    path('start-absensi/', views.api_start_absensi),
+    path('end-absensi/', views.api_end_absensi),
+    path('start-telat', views.api_start_telat),
+]
