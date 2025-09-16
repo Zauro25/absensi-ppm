@@ -14,10 +14,13 @@ export default function UploadFotoSantri() {
     const formData = new FormData();
     formData.append("foto", file);
 
+    const userData = JSON.parse(localStorage.getItem("user"));
+    const token = userData?.token;
+
     const res = await fetch("http://127.0.0.1:8000/api/santri/upload-foto/", {
       method: "POST",
       headers: {
-        "Authorization": "Token " + localStorage.getItem("token"),
+        Authorization: "Token " + token,
       },
       body: formData,
     });

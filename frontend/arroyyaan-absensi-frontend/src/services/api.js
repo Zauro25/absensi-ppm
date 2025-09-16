@@ -5,6 +5,18 @@ function authHeaders() {
   return token ? { "Authorization": `Token ${token}` } : {};
 }
 
+export async function fetchSantriApi() {
+  const res = await fetch(`${API_BASE}/santri/`, {
+    headers: authHeaders()
+  });
+  return res.json();
+}
+export async function fetchUser() {
+  const res = await fetch(`${API_BASE}/user/`, {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export async function login(username, password) {
   const res = await fetch(`${API_BASE}/login-token/`, {
     method: "POST",
@@ -24,14 +36,14 @@ export async function registerPengurus(data) {
 }
 
 export async function listSantri() {
-  const token = localStorage.getItem("token");
-  const res = await fetch(`${process.env.REACT_APP_API_BASE || "http://localhost:8000/api"}/santri/`, {
+  const res = await fetch(`${API_BASE}/santri/`, {
     headers: {
-      "Authorization": `Token ${token}`
-    }
+      Authorization: `Token ${localStorage.getItem("token")}`,
+    },
   });
   return res.json();
 }
+
 
 export async function registerSantri(formData) {
   const res = await fetch(`${API_BASE}/santri/register/`, {

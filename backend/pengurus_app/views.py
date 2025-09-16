@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.contrib.auth import authenticate, login, logout
 from .models import Santri, Absensi, SuratIzin
 from .serializers import SantriSerializer, AbsensiSerializer, SuratIzinSerializer, UserSerializer, RegisterSantriAccountSerializer
+from .face_utils import prepare_image_for_face_recognition
 from rest_framework import generics, status
 from django.utils import timezone
 from .face_utils import decode_base64_image, recognize_from_image_pil
@@ -13,10 +14,12 @@ from rest_framework.views import APIView
 from django.db import IntegrityError
 import datetime
 import pandas as pd
+import face_recognition
 from io import BytesIO
 from django.http import HttpResponse
 from reportlab.pdfgen import canvas
 from django.core.cache import cache
+import traceback
 
 
 # REGISTER PENGURUS (AllowAny)
@@ -40,6 +43,18 @@ class RegisterSantriView(generics.CreateAPIView):
             "role": "santri"
         })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_get_user(request):
+    user = request.user
+    role = "pengurus" if user.is_staff else "santri"
+    return Response({
+        "id": user.id,
+        "username": user.username,
+        "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
+        "role": role
+    })
 
 # SANTRI UPLOAD FOTO WAJAH
 @api_view(['POST'])
@@ -56,36 +71,81 @@ def api_santri_upload_foto(request):
     santri.foto = foto
     santri.save()
 
-    import face_recognition
-    img_np = face_recognition.load_image_file(santri.foto.path)
-    encs = face_recognition.face_encodings(img_np)
-    if encs:
+    try:
+        encs = []
+
+        # 🔥 1. Coba RGB
+        try:
+            img_np = prepare_image_for_face_recognition(santri.foto.path, force_gray=False)
+            print("DEBUG >> coba RGB")
+            encs = face_recognition.face_encodings(img_np)
+        except Exception as e1:
+            print("DEBUG >> gagal di RGB:", str(e1))
+
+        # 🔥 2. Kalau gagal, coba grayscale
+        if not encs:
+            try:
+                img_np = prepare_image_for_face_recognition(santri.foto.path, force_gray=True)
+                print("DEBUG >> coba Grayscale")
+                encs = face_recognition.face_encodings(img_np)
+            except Exception as e2:
+                print("DEBUG >> gagal di Grayscale:", str(e2))
+
+        # 🔥 3. Kalau tetep gagal
+        if not encs:
+            return Response({"ok": False, "message": "Gagal proses wajah: format tidak didukung"}, status=500)
+
+        # Simpan encoding ke DB
         santri.face_encoding = encs[0].tolist()
         santri.save()
-        return Response({"ok": True, "message": "Foto berhasil disimpan"})
-    return Response({"ok": False, "message": "Wajah tidak terdeteksi"}, status=400)
+
+        return Response({"ok": True, "message": "Foto berhasil disimpan & wajah terdeteksi"})
+
+    except Exception as e:
+        traceback.print_exc()
+        return Response({"ok": False, "message": f"Error proses wajah: {str(e)}"}, status=500)
+
+
 
 # LOGIN TOKEN-BASED (AllowAny)
 class LoginPengurusView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
         user = authenticate(username=username, password=password)
         if user is not None:
             token, _ = Token.objects.get_or_create(user=user)
-            role = "pengurus" if user.is_staff else "santri"
+
+            # cek apakah user ini punya profil santri
+            santri_name = None
+            role = "pengurus"
+            if hasattr(user, "santri_profile"):
+                santri_name = user.santri_profile.nama
+                role = "santri"
+
             return Response({
                 "token": token.key,
                 "role": role,
                 "user": {
                     "id": user.id,
                     "username": user.username,
-                    "is_staff": user.is_staff,
-                    "is_superuser": user.is_superuser
+                    "nama_lengkap": santri_name  # << ini nambahin nama lengkap kalau santri
                 }
             })
         return Response({"error": "Invalid Credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_logout(request):
+    try:
+        if hasattr(request.user, "auth_token"):
+            request.user.auth_token.delete()
+    except Exception as e:
+        print("Logout error:", e)
+    return Response({"ok": True, "message": "Logout berhasil"})
 
 class StartAbsensiView(APIView):
     permission_classes = [IsAuthenticated]

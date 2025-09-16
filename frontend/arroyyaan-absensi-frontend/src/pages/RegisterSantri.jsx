@@ -37,61 +37,79 @@ export default function RegisterSantri() {
   };
 
   return (
-    <div className="container">
-      <h3>Register Akun Santri</h3>
-      <form onSubmit={submit}>
-        <input
-          placeholder="Nama Lengkap"
-          className="form-control mb-2"
-          value={form.nama}
-          onChange={(e) => setForm({ ...form, nama: e.target.value })}
-        />
-        <input
-          placeholder="Asal Daerah"
-          className="form-control mb-2"
-          value={form.asal_daerah}
-          onChange={(e) => setForm({ ...form, asal_daerah: e.target.value })}
-        />
-        <select
-          className="form-select mb-2"
-          value={form.sektor}
-          onChange={(e) => setForm({ ...form, sektor: e.target.value })}
-        >
-          <option value="kepuh">Kepuh</option>
-          <option value="sidobali">Sidobali</option>
-        </select>
-        <input
-          placeholder="Angkatan"
-          className="form-control mb-2"
-          value={form.angkatan}
-          onChange={(e) => setForm({ ...form, angkatan: e.target.value })}
-        />
-        <select
-          className="form-select mb-2"
-          value={form.jenis_kelamin}
-          onChange={(e) =>
-            setForm({ ...form, jenis_kelamin: e.target.value })
-          }
-        >
-          <option value="L">Laki-laki</option>
-          <option value="P">Perempuan</option>
-        </select>
-        <input
-          placeholder="Username"
-          className="form-control mb-2"
-          value={form.username}
-          onChange={(e) => setForm({ ...form, username: e.target.value })}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="form-control mb-2"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-        />
-        <button className="btn btn-primary">Register</button>
-      </form>
-      <div className="mt-2 text-info">{msg}</div>
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
+      <h3 className="text-white font-bold text-2xl md:text-3xl mb-6 text-center">
+        Register Akun Santri
+      </h3>
+      
+      <div className="w-full max-w-md bg-gray-400 p-6 rounded-lg shadow-lg">
+        <form onSubmit={submit} className="space-y-4">
+          <input
+            placeholder="Nama Lengkap"
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.nama}
+            onChange={(e) => setForm({ ...form, nama: e.target.value })}
+            required
+          />
+          <input
+            placeholder="Asal Daerah"
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.asal_daerah}
+            onChange={(e) => setForm({ ...form, asal_daerah: e.target.value })}
+            required
+          />
+          <select
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.sektor}
+            onChange={(e) => setForm({ ...form, sektor: e.target.value })}
+          >
+            <option value="kepuh">Kepuh</option>
+            <option value="sidobali">Sidobali</option>
+          </select>
+          <input
+            placeholder="Angkatan"
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.angkatan}
+            onChange={(e) => setForm({ ...form, angkatan: e.target.value })}
+            required
+          />
+          <select
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.jenis_kelamin}
+            onChange={(e) => setForm({ ...form, jenis_kelamin: e.target.value })}
+          >
+            <option value="L">Laki-laki</option>
+            <option value="P">Perempuan</option>
+          </select>
+          <input
+            placeholder="Username"
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 outline-none bg-white text-black"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            required
+          />
+          <button 
+            type="submit"
+            className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          >
+            Register
+          </button>
+        </form>
+        
+        {msg && (
+          <div className="mt-4 p-3 bg-white rounded-lg text-sm text-center">
+            {msg}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
