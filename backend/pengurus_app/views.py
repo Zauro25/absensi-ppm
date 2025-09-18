@@ -20,6 +20,7 @@ from django.http import HttpResponse
 from reportlab.pdfgen import canvas
 from django.core.cache import cache
 import traceback
+import numpy as np
 
 
 # REGISTER PENGURUS (AllowAny)
@@ -57,53 +58,48 @@ def api_get_user(request):
     })
 
 # SANTRI UPLOAD FOTO WAJAH
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def api_santri_upload_foto(request):
-    if not hasattr(request.user, "santri_profile"):
-        return Response({"ok": False, "message": "Bukan akun santri"}, status=403)
-
-    foto = request.FILES.get("foto")
-    if not foto:
-        return Response({"ok": False, "message": "Upload foto diperlukan"}, status=400)
-
-    santri = request.user.santri_profile
-    santri.foto = foto
-    santri.save()
-
     try:
-        encs = []
+        santri_id = request.data.get("santri_id")
+        foto_file = request.FILES.get("foto")
 
-        # 🔥 1. Coba RGB
+        if not santri_id or not foto_file:
+            return Response({"error": "santri_id dan foto wajib diisi"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ambil santri
         try:
-            img_np = prepare_image_for_face_recognition(santri.foto.path, force_gray=False)
-            print("DEBUG >> coba RGB")
-            encs = face_recognition.face_encodings(img_np)
-        except Exception as e1:
-            print("DEBUG >> gagal di RGB:", str(e1))
+            santri = Santri.objects.get(id=santri_id)
+        except Santri.DoesNotExist:
+            return Response({"error": "Santri tidak ditemukan"}, status=status.HTTP_404_NOT_FOUND)
 
-        # 🔥 2. Kalau gagal, coba grayscale
-        if not encs:
-            try:
-                img_np = prepare_image_for_face_recognition(santri.foto.path, force_gray=True)
-                print("DEBUG >> coba Grayscale")
-                encs = face_recognition.face_encodings(img_np)
-            except Exception as e2:
-                print("DEBUG >> gagal di Grayscale:", str(e2))
+        # simpan file foto dulu
+        santri.foto = foto_file
+        santri.save()
 
-        # 🔥 3. Kalau tetep gagal
-        if not encs:
-            return Response({"ok": False, "message": "Gagal proses wajah: format tidak didukung"}, status=500)
+        # 🔥 load file langsung dengan face_recognition (lebih aman daripada np.array(PIL.Image))
+        img_path = santri.foto.path
+        print("DEBUG >> proses file:", img_path)
 
-        # Simpan encoding ke DB
+        img = face_recognition.load_image_file(img_path)
+        print("DEBUG >> dtype:", img.dtype, "shape:", img.shape, "C_CONTIGUOUS:", img.flags['C_CONTIGUOUS'])
+
+        encs = face_recognition.face_encodings(img)
+
+        if len(encs) == 0:
+            return Response({"error": "Wajah tidak terdeteksi, coba gunakan foto yang lebih jelas"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # simpan encoding ke DB
         santri.face_encoding = encs[0].tolist()
         santri.save()
 
-        return Response({"ok": True, "message": "Foto berhasil disimpan & wajah terdeteksi"})
+        return Response({"success": True, "message": "Foto berhasil diupload & encoding disimpan"}, status=status.HTTP_200_OK)
 
     except Exception as e:
+        import traceback
         traceback.print_exc()
-        return Response({"ok": False, "message": f"Error proses wajah: {str(e)}"}, status=500)
+        return Response({"error": f"Error proses wajah: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -209,12 +205,18 @@ def api_recognize_and_attend(request):
     if not santri:
         return Response({"ok": False, "message": "Wajah tidak cocok"}, status=404)
 
+    # 🔥 Status default
     status_absensi = "Hadir"
+
+    # 🔥 Kalau tombol "mulai telat" sudah ditekan, baru hitung T1/T2/T3
     if telat_time:
         diff = (timezone.now() - telat_time).total_seconds() / 60
-        if diff <= 5: status_absensi = "T1"
-        elif diff <= 15: status_absensi = "T2"
-        else: status_absensi = "T3"
+        if diff <= 5:
+            status_absensi = "T1"
+        elif diff <= 15:
+            status_absensi = "T2"
+        else:
+            status_absensi = "T3"
 
     Absensi.objects.update_or_create(
         santri=santri,
@@ -222,7 +224,14 @@ def api_recognize_and_attend(request):
         sesi=sesi,
         defaults={"status": status_absensi, "created_by": request.user}
     )
-    return Response({"ok": True, "santri": santri.nama, "status": status_absensi})
+
+    return Response({
+        "ok": True,
+        "santri": santri.nama,
+        "status": status_absensi
+    })
+
+
 
 # LIST SANTRI
 @api_view(['GET'])
@@ -254,61 +263,6 @@ def api_upload_surat_izin(request):
     return Response({'ok': True, 'surat': SuratIzinSerializer(si).data})
 
 # RECOGNIZE & ATTEND (pengurus only) — expects image (base64), tanggal, sesi
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def api_recognize_and_attend(request):
-    data_url = request.data.get('image')
-    tanggal = request.data.get('tanggal')
-    sesi = request.data.get('sesi')
-    if not (data_url and tanggal and sesi):
-        return Response({'ok': False, 'message': 'Lengkapi data (image, tanggal, sesi)'}, status=400)
-    try:
-        pil_img = decode_base64_image(data_url)
-    except Exception:
-        return Response({'ok': False, 'message': 'Image decode gagal'}, status=400)
-    santri, info = recognize_from_image_pil(pil_img, tolerance=0.5)
-    if santri is None:
-        if info == "no_face":
-            return Response({'ok': False, 'message': 'Wajah tidak terdeteksi'}, status=400)
-        elif info == "no_dataset":
-            return Response({'ok': False, 'message': 'Data wajah kosong'}, status=400)
-        else:
-            return Response({'ok': False, 'message': 'Wajah tidak cocok'}, status=404)
-    # tentukan status based on waktu sekarang vs jadwal sesi
-    # definisi jam mulai berdasarkan sesi (sesuaikan jika diperlukan)
-    sesi_jam_mulai = {'Subuh': (4,0), 'Sore': (15,0), 'Malam': (19,0)}
-    now = timezone.localtime(timezone.now())
-    try:
-        t_year, t_month, t_day = [int(x) for x in tanggal.split('-')]
-        jadwal_hour, jadwal_minute = sesi_jam_mulai.get(sesi, (8,0))
-        t_mulai = timezone.make_aware(datetime.datetime(t_year, t_month, t_day, jadwal_hour, jadwal_minute))
-    except Exception:
-        # fallback gunakan now
-        t_mulai = timezone.make_aware(datetime.datetime(now.year, now.month, now.day, 8, 0))
-
-    diff = now - t_mulai
-    minutes_late = diff.total_seconds() / 60
-    if minutes_late <= 0:
-        status_str = 'Hadir'
-    elif minutes_late <= 5:
-        status_str = 'T1'
-    elif minutes_late <= 15:
-        status_str = 'T2'
-    else:
-        status_str = 'T3'
-
-    # simpan absensi (unique per santri,tanggal,sesi)
-    try:
-        a, created = Absensi.objects.update_or_create(
-            santri=santri,
-            tanggal=tanggal,
-            sesi=sesi,
-            defaults={'status': status_str, 'created_by': request.user, 'waktu_scan': now}
-        )
-    except Exception as e:
-        return Response({'ok': False, 'message': f'Gagal simpan absensi: {str(e)}'}, status=500)
-
-    return Response({'ok': True, 'santri': {'id': santri.id, 'santri_id': santri.santri_id, 'nama': santri.nama}, 'status': status_str})
 
 # REKAP pivot (range) — returns JSON pivot and also we have export endpoints
 @api_view(['GET'])

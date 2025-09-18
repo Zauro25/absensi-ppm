@@ -25,6 +25,7 @@ export default function Login() {
         };
 
         localStorage.setItem("user", JSON.stringify(userData));
+        localStorage.setItem("token", res.token)
         setMsg("✅ Login sukses!");
 
         if (userData.role === "pengurus") {

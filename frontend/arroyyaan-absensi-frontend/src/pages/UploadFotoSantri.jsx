@@ -11,25 +11,36 @@ export default function UploadFotoSantri() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("foto", file);
-
     const userData = JSON.parse(localStorage.getItem("user"));
     const token = userData?.token;
+    const santriId = userData?.id; // 🔥 ambil ID santri dari user login
 
-    const res = await fetch("http://127.0.0.1:8000/api/santri/upload-foto/", {
-      method: "POST",
-      headers: {
-        Authorization: "Token " + token,
-      },
-      body: formData,
-    });
+    if (!santriId) {
+      setMsg("❌ santriId tidak ditemukan di userData!");
+      return;
+    }
 
-    const data = await res.json();
-    if (res.ok) {
-      setMsg("✅ Foto berhasil diupload & wajah terdeteksi!");
-    } else {
-      setMsg("❌ Gagal: " + (data.message || "Terjadi error"));
+    const formData = new FormData();
+    formData.append("santri_id", santriId); // wajib ada
+    formData.append("foto", file);          // wajib ada
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/santri/upload-foto/", {
+        method: "POST",
+        headers: {
+          Authorization: "Token " + token,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMsg("✅ Foto berhasil diupload & wajah terdeteksi!");
+      } else {
+        setMsg("❌ Gagal: " + (data.error || data.message || "Terjadi error"));
+      }
+    } catch (err) {
+      setMsg("❌ Error koneksi: " + err.message);
     }
   };
 
